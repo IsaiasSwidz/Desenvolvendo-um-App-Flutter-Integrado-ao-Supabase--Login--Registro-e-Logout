@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
-import '../services/auth_service.dart';
-import '../models/user_model.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 class HomeScreen extends StatefulWidget {
   final VoidCallback onLogout;
@@ -12,8 +11,8 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  final AuthService _authService = AuthService();
-  UserModel? _currentUser;
+  final _supabase = Supabase.instance.client;
+  Map<String, dynamic>? _userProfile;
   bool _isLoading = true;
 
   @override
@@ -23,16 +22,34 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _loadUserProfile() async {
-    final user = await _authService.getCurrentUserProfile();
-    setState(() {
-      _currentUser = user;
-      _isLoading = false;
-    });
+    final user = _supabase.auth.currentUser;
+    if (user != null) {
+      try {
+        final response = await _supabase
+            .from('profiles')
+            .select()
+            .eq('id', user.id)
+            .single();
+        
+        setState(() {
+          _userProfile = response;
+          _isLoading = false;
+        });
+      } catch (e) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    } else {
+      setState(() {
+        _isLoading = false;
+      });
+    }
   }
 
   Future<void> _signOut() async {
     try {
-      await _authService.signOut();
+      await _supabase.auth.signOut();
       widget.onLogout();
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -46,6 +63,8 @@ class _HomeScreenState extends State<HomeScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Home'),
+        backgroundColor: Colors.blue,
+        foregroundColor: Colors.white,
         actions: [
           IconButton(
             icon: const Icon(Icons.logout),
@@ -57,7 +76,7 @@ class _HomeScreenState extends State<HomeScreen> {
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : Padding(
-              padding: const EdgeInsets.all(16.0),
+              padding: const EdgeInsets.all(20.0),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -67,21 +86,20 @@ class _HomeScreenState extends State<HomeScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(
-                            'Bem-vindo!',
-                            style: Theme.of(context).textTheme.headlineSmall,
+                          const Text(
+                            'Perfil do Usuário',
+                            style: TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.bold,
+                            ),
                           ),
                           const SizedBox(height: 16),
-                          if (_currentUser != null) ...[
-                            _buildUserInfo('ID', _currentUser!.id),
-                            _buildUserInfo('Email', _currentUser!.email),
-                            if (_currentUser!.name != null)
-                              _buildUserInfo('Nome', _currentUser!.name!),
-                            if (_currentUser!.createdAt != null)
-                              _buildUserInfo(
-                                'Cadastrado em',
-                                '${_currentUser!.createdAt!.day}/${_currentUser!.createdAt!.month}/${_currentUser!.createdAt!.year}',
-                              ),
+                          if (_userProfile != null) ...[
+                            _buildUserInfo('Nome', _userProfile!['name'] ?? 'Não informado'),
+                            _buildUserInfo('Email', _userProfile!['email'] ?? 'Não informado'),
+                            _buildUserInfo('ID', _userProfile!['id'] ?? 'Não informado'),
+                          ] else ...[
+                            const Text('Informações do perfil não disponíveis'),
                           ],
                         ],
                       ),
@@ -93,25 +111,26 @@ class _HomeScreenState extends State<HomeScreen> {
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Icon(
-                            Icons.check_circle,
-                            color: Colors.green,
-                            size: 64,
+                          const Icon(Icons.check_circle, size: 64, color: Colors.green),
+                          const SizedBox(height: 20),
+                          const Text(
+                            'Login realizado com sucesso! 🎉',
+                            style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                           ),
-                          const SizedBox(height: 16),
-                          Text(
-                            'Login realizado com sucesso!',
-                            style: Theme.of(context).textTheme.headlineSmall,
+                          const SizedBox(height: 10),
+                          const Text(
+                            'Sua autenticação está funcionando perfeitamente com o Supabase.',
                             textAlign: TextAlign.center,
+                            style: TextStyle(fontSize: 16, color: Colors.grey),
                           ),
-                          const SizedBox(height: 8),
-                          Text(
-                            'Seus dados estão salvos na nuvem e persistirão entre dispositivos.',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                              color: Colors.grey[600],
-                              fontSize: 16,
+                          const SizedBox(height: 30),
+                          ElevatedButton(
+                            onPressed: _signOut,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.red,
+                              foregroundColor: Colors.white,
                             ),
+                            child: const Text('Fazer Logout'),
                           ),
                         ],
                       ),

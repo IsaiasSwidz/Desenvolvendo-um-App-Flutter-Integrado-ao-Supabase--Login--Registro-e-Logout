@@ -1,19 +1,31 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
-import 'supabase_config.dart';
-import 'screens/login_screen.dart';
-import 'screens/register_screen.dart';
-import 'screens/home_screen.dart';
-import 'services/auth_service.dart';
+import 'package:flutter_application_3/screens/home_screen.dart';
+import 'package:flutter_application_3/screens/login_screen.dart';
+import 'package:flutter_application_3/screens/register_screen.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   
-  // Carrega variáveis de ambiente
-  await dotenv.load(fileName: ".env");
+  const String supabaseUrl = String.fromEnvironment(
+    'SUPABASE_URL',
+    defaultValue: 'https://xdenlzphtecnjuqrmgvz.supabase.co',
+  );
   
-  // Inicializa o Supabase
-  await SupabaseConfig.initialize();
+  const String supabaseAnonKey = String.fromEnvironment(
+    'SUPABASE_ANON_KEY',
+    defaultValue: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhkZW5senBodGVjbmp1cXJtZ3Z6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjI4OTg5MzgsImV4cCI6MjA3ODQ3NDkzOH0.q7pMBAI7tji5zarydMPHCzOClJccHbO1WG6G7nwk6Dk',
+  );
+
+  try {
+    await Supabase.initialize(
+      url: supabaseUrl,
+      anonKey: supabaseAnonKey,
+    );
+    print('✅ Supabase inicializado com sucesso!');
+  } catch (e) {
+    print('❌ Erro ao inicializar Supabase: $e');
+  }
   
   runApp(const MyApp());
 }
@@ -24,9 +36,9 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Supabase Auth App',
+      title: 'App Supabase',
       theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
+        colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
         useMaterial3: true,
       ),
       home: const AuthWrapper(),
@@ -42,7 +54,7 @@ class AuthWrapper extends StatefulWidget {
 }
 
 class _AuthWrapperState extends State<AuthWrapper> {
-  final AuthService _authService = AuthService();
+  final SupabaseClient _supabase = Supabase.instance.client;
   bool _isLoading = true;
   bool _isLoggedIn = false;
   bool _showLogin = true;
@@ -50,23 +62,23 @@ class _AuthWrapperState extends State<AuthWrapper> {
   @override
   void initState() {
     super.initState();
-    _checkAuthStatus();
+    _checkAuth();
     _setupAuthListener();
   }
 
-  void _checkAuthStatus() {
-    final user = _authService.currentUser;
+  Future<void> _checkAuth() async {
+    final session = _supabase.auth.currentSession;
     setState(() {
-      _isLoggedIn = user != null;
+      _isLoggedIn = session != null;
       _isLoading = false;
     });
   }
 
   void _setupAuthListener() {
-    _authService.authStateChanges.listen((data) {
-      final user = data.session?.user;
+    _supabase.auth.onAuthStateChange.listen((data) {
+      final session = data.session;
       setState(() {
-        _isLoggedIn = user != null;
+        _isLoggedIn = session != null;
       });
     });
   }
@@ -94,9 +106,7 @@ class _AuthWrapperState extends State<AuthWrapper> {
   Widget build(BuildContext context) {
     if (_isLoading) {
       return const Scaffold(
-        body: Center(
-          child: CircularProgressIndicator(),
-        ),
+        body: Center(child: CircularProgressIndicator()),
       );
     }
 

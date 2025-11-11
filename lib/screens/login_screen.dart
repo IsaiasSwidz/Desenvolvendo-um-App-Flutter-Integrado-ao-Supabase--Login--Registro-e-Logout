@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../services/auth_service.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 class LoginScreen extends StatefulWidget {
   final VoidCallback onToggleScreen;
@@ -16,36 +16,50 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
-  final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
-  final _authService = AuthService();
+  final _supabase = Supabase.instance.client;
 
   bool _isLoading = false;
   String _errorMessage = '';
 
   Future<void> _signIn() async {
-    if (!_formKey.currentState!.validate()) return;
+    if (_emailController.text.isEmpty || _passwordController.text.isEmpty) {
+      setState(() {
+        _errorMessage = 'Por favor, preencha todos os campos';
+      });
+      return;
+    }
 
     setState(() {
       _isLoading = true;
       _errorMessage = '';
     });
 
-    final error = await _authService.signIn(
-      email: _emailController.text.trim(),
-      password: _passwordController.text,
-    );
+    try {
+      final response = await _supabase.auth.signInWithPassword(
+        email: _emailController.text.trim(),
+        password: _passwordController.text,
+      );
 
-    setState(() {
-      _isLoading = false;
-    });
-
-    if (error == null) {
-      widget.onLoginSuccess();
-    } else {
+      if (response.user != null) {
+        widget.onLoginSuccess();
+      } else {
+        setState(() {
+          _errorMessage = 'Erro ao fazer login';
+        });
+      }
+    } on AuthException catch (e) {
       setState(() {
-        _errorMessage = error;
+        _errorMessage = e.message;
+      });
+    } catch (e) {
+      setState(() {
+        _errorMessage = 'Erro desconhecido: $e';
+      });
+    } finally {
+      setState(() {
+        _isLoading = false;
       });
     }
   }
@@ -53,93 +67,86 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Login'),
-      ),
+      appBar: AppBar(title: const Text('Login')),
       body: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Form(
-          key: _formKey,
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Text(
-                'Bem-vindo de volta!',
-                style: Theme.of(context).textTheme.headlineSmall,
+        padding: const EdgeInsets.all(20.0),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.lock_open, size: 64, color: Colors.blue),
+            const SizedBox(height: 20),
+            const Text(
+              'Bem-vindo!',
+              style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 10),
+            const Text('Faça login para continuar'),
+            const SizedBox(height: 30),
+
+            // Campo de Email
+            TextField(
+              controller: _emailController,
+              decoration: const InputDecoration(
+                labelText: 'Email',
+                border: OutlineInputBorder(),
+                prefixIcon: Icon(Icons.email),
               ),
-              const SizedBox(height: 32),
-              
-              if (_errorMessage.isNotEmpty)
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.red[100],
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Text(
-                    _errorMessage,
-                    style: const TextStyle(color: Colors.red),
-                  ),
-                ),
-              
-              if (_errorMessage.isNotEmpty) const SizedBox(height: 16),
-              
-              TextFormField(
-                controller: _emailController,
-                decoration: const InputDecoration(
-                  labelText: 'Email',
-                  border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.email),
-                ),
-                keyboardType: TextInputType.emailAddress,
-                validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return 'Por favor, digite seu email';
-                  }
-                  if (!value.contains('@')) {
-                    return 'Por favor, digite um email válido';
-                  }
-                  return null;
-                },
+              keyboardType: TextInputType.emailAddress,
+            ),
+            const SizedBox(height: 16),
+
+            // Campo de Senha
+            TextField(
+              controller: _passwordController,
+              decoration: const InputDecoration(
+                labelText: 'Senha',
+                border: OutlineInputBorder(),
+                prefixIcon: Icon(Icons.lock),
               ),
-              const SizedBox(height: 16),
-              TextFormField(
-                controller: _passwordController,
-                decoration: const InputDecoration(
-                  labelText: 'Senha',
-                  border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.lock),
-                ),
-                obscureText: true,
-                validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return 'Por favor, digite sua senha';
-                  }
-                  if (value.length < 6) {
-                    return 'A senha deve ter pelo menos 6 caracteres';
-                  }
-                  return null;
-                },
-              ),
-              const SizedBox(height: 24),
-              SizedBox(
+              obscureText: true,
+            ),
+            const SizedBox(height: 20),
+
+            // Mensagem de erro
+            if (_errorMessage.isNotEmpty)
+              Container(
                 width: double.infinity,
-                height: 50,
-                child: ElevatedButton(
-                  onPressed: _isLoading ? null : _signIn,
-                  child: _isLoading
-                      ? const CircularProgressIndicator()
-                      : const Text('Entrar'),
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.red[100],
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  _errorMessage,
+                  style: const TextStyle(color: Colors.red),
                 ),
               ),
-              const SizedBox(height: 16),
-              TextButton(
-                onPressed: widget.onToggleScreen,
-                child: const Text('Não tem uma conta? Cadastre-se'),
+            
+            if (_errorMessage.isNotEmpty) const SizedBox(height: 16),
+
+            // Botão de Login
+            SizedBox(
+              width: double.infinity,
+              height: 50,
+              child: ElevatedButton(
+                onPressed: _isLoading ? null : _signIn,
+                child: _isLoading
+                    ? const CircularProgressIndicator()
+                    : const Text('Fazer Login'),
               ),
-            ],
-          ),
+            ),
+            const SizedBox(height: 10),
+
+            // Botão para Cadastro
+            SizedBox(
+              width: double.infinity,
+              height: 50,
+              child: TextButton(
+                onPressed: widget.onToggleScreen,
+                child: const Text('Criar Conta'),
+              ),
+            ),
+          ],
         ),
       ),
     );
